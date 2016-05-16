@@ -1,0 +1,215 @@
+---
+title: "NOAA DB"
+author: "jbratanov"
+date: "Thursday, May 12, 2016"
+output: html_document
+---
+
+# Data Processing
+
+#### Load NOAA database records
+```{r cacheDataRead, cache=TRUE}
+# Read in NOAA database records
+noaa_DF <- read.csv(bzfile("c:/coursera/ReproducibleData/week4/repdata_data_StormData.csv.bz2"), 
+                sep=",",header=TRUE)   
+
+```
+#### Identify and validate column data required for study
+```{r}
+names(noaa_DF)
+```
+#### Variables used to show the most harmful weather events to population health and economics.
+1. Weather events
+   + __EVTYPE__ - Event Type
+
+2. Population Health
+   + __FATALITIES__ - Human Fatalities
+   + __INJURIES__ - Human Injuries
+
+3. Economic Impact
+   + __PROPDMG__ - Property Damage
+   + __PROPDMGEXP__ - Property damage cost multiplier
+   + __CROPDMG__ - Crop Damage
+   + __CROPDMGEXP__ - crop damage cost multiplier
+   
+#### Get columns of data needed in study.
+```{r}
+storm_DF <- noaa_DF[, c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP" )]
+```
+#### Drop records which have no use for the study to tighten up size and usefulness.
+```{r}
+# drop any record which doesn't have a at least one useful value above zero in key data columns
+study_DF <- storm_DF[ which(storm_DF$FATALITIES > 0
+                      | storm_DF$INJURIES > 0
+                      | storm_DF$PROPDMG > 0
+                      | storm_DF$CROPDMG > 0), ]
+```
+#### Validate Event Types and categorize.
+There are events which can be aggregated from similar event types or mis-spellings.
+Started with 488 events types, aggregated to 33 event types.
+```{r}
+# Get event types
+#unique(study_DF$EVTYPE)
+# convert events to upper case to help clean data
+study_DF$EVTYPE <- toupper(study_DF$EVTYPE)
+
+# Manually did interative changes until most events were categorized.
+
+# 1st iteration
+study_DF$EVTYPE[grep("*TORNADO*|*FUNNEL*", study_DF$EVTYPE)] <- "TORNADO"
+study_DF$EVTYPE[grep("*HURRICANE*|*TYPHOON*", study_DF$EVTYPE)] <- "HURRICANE"
+study_DF$EVTYPE[grep("*WIND*|*BURST*|*GUST*|*TURB*", study_DF$EVTYPE)] <- "WIND"
+study_DF$EVTYPE[grep("*FIRE*", study_DF$EVTYPE)] <- "FIRE"
+
+study_DF$EVTYPE[grep("*COLD*|*LOW TEMPERATURE*|*WINTRY*|*FREEZE*|*HYPO*", study_DF$EVTYPE)] <- "COLD"
+study_DF$EVTYPE[grep("*HEAT*|*HOT*", study_DF$EVTYPE)] <- "HEAT"
+study_DF$EVTYPE[grep("*FOG*", study_DF$EVTYPE)] <- "FOG"
+study_DF$EVTYPE[grep("*ICE*|*ICY*|*FROST*|*GLAZE*|*SLEET*|*MIXED*", study_DF$EVTYPE)] <- "ICE"
+# 2nd iteration
+study_DF$EVTYPE[grep("*SNOW*|*BLIZ*", study_DF$EVTYPE)] <- "SNOW"
+study_DF$EVTYPE[grep("*HAIL*", study_DF$EVTYPE)] <- "HAIL"
+study_DF$EVTYPE[grep("*SURF*|*SEAS*|*MARINE*|*CURRENT*|*TSUNAMI|*COAST*|*BEACH*|*SWELL*|*TIDES*|*WAVE*",
+                     study_DF$EVTYPE)] <- "MARINE"
+study_DF$EVTYPE[grep("*LAND*|*AVALANCHE*|*SLIDE*", study_DF$EVTYPE)] <- "LANDSLIDE"
+# 3rd iteration
+study_DF$EVTYPE[grep("*FLOOD*|*STREAM*|*HIGH WATER*|*DROWN*|*DAM*", study_DF$EVTYPE)] <- "FLOOD"
+study_DF$EVTYPE[grep("*DRY*|*DROUGHT*", study_DF$EVTYPE)] <- "DRY"
+study_DF$EVTYPE[grep("*RAIN*|*WET*", study_DF$EVTYPE)] <- "RAIN"
+study_DF$EVTYPE[grep("*LIGHT*", study_DF$EVTYPE)] <- "LIGHTNING"
+study_DF$EVTYPE[grep("*DUST*", study_DF$EVTYPE)] <- "DUST"
+
+```
+#### Validate cost multiplier value types.
+```{r}
+# Property cost factors
+table(study_DF$PROPDMGEXP)
+# Crop cost factors
+table(study_DF$CROPDMGEXP)
+```
+#### Expontential codes to be changed to numeric values
+Storm data documentation shows the following validate values:
+  * "H" for hundreds
+  * "K" for thousands
+  * "M" for millions
+  * "B" for billions
+  * Numerics for exponent values
+```{r}
+# Change property and crop damage multiplier types "h", k", "m" and "b" to uppercase.
+study_DF$PROPDMGEXP <- toupper(study_DF$PROPDMGEXP)
+study_DF$CROPDMGEXP <- toupper(study_DF$CROPDMGEXP)
+
+# Change character multiplier to numeric
+# if/then/else would be faster here, but got lazy
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "H" ] <- 100
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "K" ] <- 1000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "M" ] <- 1000000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "B" ] <- 1000000000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "-"|study_DF$PROPDMGEXP == ""|study_DF$PROPDMGEXP == "+"] <- 1
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "0" ] <- 1
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "1" ] <- 10
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "2" ] <- 100
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "3" ] <- 1000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "4" ] <- 10000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "5" ] <- 100000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "6" ] <- 1000000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "7" ] <- 10000000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "8" ] <- 100000000
+study_DF$PROPDMGEXP[study_DF$PROPDMGEXP == "9" ] <- 1000000000
+
+# Make numeric
+study_DF$PROPDMGEXP <- as.numeric(as.character(study_DF$PROPDMGEXP))
+
+# Multiple to get property value
+study_DF$PROPVAL <- study_DF$PROPDMG * study_DF$PROPDMGEXP
+
+# Change character multiplier to numeric
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "H" ] <- 100
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "K" ] <- 1000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "M" ] <- 1000000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "B" ] <- 1000000000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "-"|study_DF$CROPDMGEXP == ""|study_DF$CROPDMGEXP == "?"] <- 1
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "0" ] <- 1
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "1" ] <- 10
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "2" ] <- 100
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "3" ] <- 1000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "4" ] <- 10000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "5" ] <- 100000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "6" ] <- 1000000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "7" ] <- 10000000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "8" ] <- 100000000
+study_DF$CROPDMGEXP[study_DF$CROPDMGEXP == "9" ] <- 1000000000
+
+# Make numeric
+study_DF$CROPDMGEXP <- as.numeric(as.character(study_DF$CROPDMGEXP))
+
+# Multiple to get crop value
+study_DF$CROPVAL <- study_DF$CROPDMG * study_DF$CROPDMGEXP
+
+# Property cost factors
+table(study_DF$PROPDMGEXP)
+# Crop cost factors
+table(study_DF$CROPDMGEXP)
+
+
+```
+# Data Processing
+
+## Type of weather events causing death in the USA 1951-2011
+
+```{r}
+
+fatalities <- aggregate (FATALITIES~EVTYPE, study_DF, sum)
+fatalities <- fatalities [order(fatalities$FATALITIES, decreasing=TRUE),]
+par(mar=c(12, 6, 1, 1))
+barplot (height = fatalities$FATALITIES[1:10], names.arg = fatalities$EVTYPE[1:10], las = 2, cex.names= 0.8,
+         col = rainbow (10, start=0, end=0.5))
+title (main = "Top 10 Event that Caused Fatalities")
+title (ylab = "Total number of Fatalities")
+```
+## Type of weather events causing death in the USA 1951-2011
+```{r}
+injuries <- aggregate (INJURIES~EVTYPE, study_DF, sum)
+injuries <- injuries [order(injuries$INJURIES, decreasing=TRUE),]
+par(mar=c(12, 6, 1, 1))
+barplot (height = injuries$INJURIES[1:10],
+         names.arg = injuries$EVTYPE[1:10], las = 2, cex.names = 0.8,
+         col = rainbow (10, start=0, end=0.5))
+title (main = "Top 10 Events that Caused Injuries")
+title (ylab = "Total number of Injuries", line=4)
+```
+
+## Type of Weather Events harmful to Property in the USA 1951-2011
+
+```{r}
+
+property <- aggregate (PROPVAL~EVTYPE, study_DF, sum)
+property <- property [order(property$PROPVAL, decreasing=TRUE),]
+par(mar=c(12, 6, 1, 1))
+barplot (height = property$PROPVAL[1:10]/(1*10^9), names.arg = property$EVTYPE[1:10], las = 2, cex.names= 0.8,
+         col = rainbow (10, start=0, end=0.5))
+title (main = "Top 10 Event that Caused Property Damage")
+title (ylab = "Total amount of dollars in Billions")
+
+
+```
+
+## Type of Weather Events harmful to Crops in the USA 1951-2011
+
+```{r}
+
+crops <- aggregate (CROPVAL~EVTYPE, study_DF, sum)
+crops <- crops [order(crops$CROPVAL, decreasing=TRUE),]
+par(mar=c(12, 6, 1, 1))
+barplot (height = crops$CROPVAL[1:10]/(1*10^9), names.arg = crops$EVTYPE[1:10], las = 2, cex.names= 0.8,
+         col = rainbow (10, start=0, end=0.5))
+title (main = "Top 10 Event that Caused Crop Damage")
+title (ylab = "Total amount of dollars in Billions")
+
+
+```
+
+
+
+
+
+   
